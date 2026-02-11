@@ -1,158 +1,221 @@
-import React, { useMemo, useState } from "react";
+import React from "react";
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { CATEGORIES, CATEGORY_ORDER } from "../constants/categories";
-import type { CategoryId, LogItem } from "../types";
+import { useLogsStore } from "../store/useLogsStore";
+import type { LogItem } from "../types";
 
-type Draft = {
-  categoryId: CategoryId;
-  text: string;
-  minutes: string;     // input用
-  evidenceUrl: string; // input用
-};
+type Payload = Omit<LogItem, "id">;
 
 export function AddOrEditItemModal(props: {
   visible: boolean;
+  initial?: LogItem;
   onClose: () => void;
-  onSubmit: (item: Omit<LogItem, "id">) => void;
-  initial?: LogItem; // edit用
+  onSubmit: (payload: Payload) => void;
 }) {
-  const { visible, onClose, onSubmit, initial } = props;
+  const { visible, initial, onClose, onSubmit } = props;
 
-  const initialDraft: Draft = useMemo(() => {
-    return {
-      categoryId: initial?.categoryId ?? "os",
-      text: initial?.text ?? "",
-      minutes: initial?.minutes ? String(initial.minutes) : "",
-      evidenceUrl: initial?.evidenceUrl ?? "",
-    };
-  }, [initial]);
+  const categories = useLogsStore((s) => s.categories);
+  const addCategory = useLogsStore((s) => s.addCategory);
 
-  const [draft, setDraft] = useState<Draft>(initialDraft);
+  const [text, setText] = React.useState("");
+  const [categoryId, setCategoryId] = React.useState<string | undefined>(undefined);
+  const [minutes, setMinutes] = React.useState<string>(""); // input用
+  const [evidenceUrl, setEvidenceUrl] = React.useState<string>("");
+  const [newCategoryName, setNewCategoryName] = React.useState<string>("");
 
-  // initialが変わったときに反映（編集→別の編集に切り替えた時など）
   React.useEffect(() => {
-    setDraft(initialDraft);
-  }, [initialDraft]);
+    if (!visible) return;
 
-  const canSubmit = draft.text.trim().length > 0;
+    setText(initial?.text ?? "");
+    setCategoryId(initial?.categoryId);
+    setMinutes(typeof initial?.minutes === "number" ? String(initial.minutes) : "");
+    setEvidenceUrl(initial?.evidenceUrl ?? "");
+    setNewCategoryName("");
+  }, [visible, initial]);
+
+  const categoryList = React.useMemo(() => {
+    const arr = Object.values(categories);
+    arr.sort((a, b) => a.createdAt - b.createdAt);
+    return arr;
+  }, [categories]);
+
+  const canSave = text.trim().length > 0;
+
+  const submit = () => {
+    if (!canSave) return;
+
+    const m = minutes.trim() === "" ? undefined : Number(minutes);
+    const payload: Payload = {
+      text: text.trim(),
+      categoryId,
+      minutes: Number.isFinite(m as number) ? (m as number) : undefined,
+      evidenceUrl: evidenceUrl.trim() === "" ? undefined : evidenceUrl.trim(),
+    };
+
+    onSubmit(payload);
+    onClose();
+  };
+
+  const createCategoryAndSelect = () => {
+    const id = addCategory(newCategoryName);
+    if (!id) return;
+    setCategoryId(id);
+    setNewCategoryName("");
+  };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-        <Text style={{ fontSize: 20, fontWeight: "800" }}>
-          {initial ? "ログを編集" : "ログを追加"}
-        </Text>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)", padding: 16, justifyContent: "flex-end" }}>
+        <View style={{ backgroundColor: "#fff", borderRadius: 18, padding: 14, gap: 12, maxHeight: "85%" }}>
+          <Text style={{ fontSize: 18, fontWeight: "900" }}>
+            {initial ? "ログを編集" : "ログを追加"}
+          </Text>
 
-        <Text style={{ fontWeight: "700" }}>カテゴリ</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {CATEGORY_ORDER.map((id) => {
-            const active = draft.categoryId === id;
-            return (
-              <Pressable
-                key={id}
-                onPress={() => setDraft((d) => ({ ...d, categoryId: id }))}
+          <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ gap: 12 }}>
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 14, fontWeight: "800" }}>内容</Text>
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                placeholder="例：DPの復習、英語音読、OS本30分、筋トレ…"
                 style={{
-                  paddingVertical: 8,
-                  paddingHorizontal: 12,
-                  borderRadius: 12,
                   borderWidth: 1,
-                  borderColor: active ? "#111" : "#ccc",
-                  backgroundColor: active ? "#111" : "transparent",
+                  borderColor: "#ddd",
+                  borderRadius: 14,
+                  padding: 12,
+                  fontSize: 16,
                 }}
-              >
-                <Text style={{ color: active ? "#fff" : "#111", fontWeight: "700" }}>
-                  {CATEGORIES[id].label}
+              />
+            </View>
+
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 14, fontWeight: "800" }}>カテゴリ</Text>
+
+              {categoryList.length === 0 ? (
+                <Text style={{ color: "#666" }}>
+                  まだカテゴリがありません。下で作成してください。
                 </Text>
-              </Pressable>
-            );
-          })}
+              ) : (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {categoryList.map((c) => {
+                    const active = c.id === categoryId;
+                    return (
+                      <Pressable
+                        key={c.id}
+                        onPress={() => setCategoryId(active ? undefined : c.id)}
+                        style={{
+                          paddingVertical: 8,
+                          paddingHorizontal: 12,
+                          borderRadius: 999,
+                          borderWidth: 1,
+                          borderColor: active ? "#111" : "#ccc",
+                          backgroundColor: active ? "#111" : "transparent",
+                        }}
+                      >
+                        <Text style={{ color: active ? "#fff" : "#111", fontWeight: "800" }}>
+                          {c.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+
+              <View style={{ gap: 8, marginTop: 6 }}>
+                <Text style={{ fontSize: 13, fontWeight: "800" }}>＋ 新しいカテゴリ</Text>
+                <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                  <TextInput
+                    value={newCategoryName}
+                    onChangeText={setNewCategoryName}
+                    placeholder="例：アルゴリズム / 研究 / 生活"
+                    style={{
+                      flex: 1,
+                      borderWidth: 1,
+                      borderColor: "#ddd",
+                      borderRadius: 14,
+                      padding: 12,
+                      fontSize: 16,
+                    }}
+                  />
+                  <Pressable
+                    onPress={createCategoryAndSelect}
+                    style={{
+                      paddingVertical: 12,
+                      paddingHorizontal: 14,
+                      borderRadius: 14,
+                      backgroundColor: newCategoryName.trim() ? "#111" : "#bbb",
+                    }}
+                    disabled={!newCategoryName.trim()}
+                  >
+                    <Text style={{ color: "#fff", fontWeight: "900" }}>作成</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 14, fontWeight: "800" }}>所要時間（分・任意）</Text>
+              <TextInput
+                value={minutes}
+                onChangeText={(t) => setMinutes(t.replace(/[^\d]/g, ""))}
+                keyboardType="number-pad"
+                placeholder="例：30"
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#ddd",
+                  borderRadius: 14,
+                  padding: 12,
+                  fontSize: 16,
+                }}
+              />
+            </View>
+
+            <View style={{ gap: 8 }}>
+              <Text style={{ fontSize: 14, fontWeight: "800" }}>証拠URL（任意）</Text>
+              <TextInput
+                value={evidenceUrl}
+                onChangeText={setEvidenceUrl}
+                placeholder="例：https://..."
+                autoCapitalize="none"
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#ddd",
+                  borderRadius: 14,
+                  padding: 12,
+                  fontSize: 16,
+                }}
+              />
+            </View>
+          </ScrollView>
+
+          <View style={{ flexDirection: "row", gap: 10, justifyContent: "flex-end" }}>
+            <Pressable
+              onPress={onClose}
+              style={{
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: "#ccc",
+              }}
+            >
+              <Text style={{ fontWeight: "900" }}>キャンセル</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={submit}
+              disabled={!canSave}
+              style={{
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                borderRadius: 14,
+                backgroundColor: canSave ? "#111" : "#bbb",
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "900" }}>保存</Text>
+            </Pressable>
+          </View>
         </View>
-
-        <Text style={{ fontWeight: "700" }}>今日やったこと（1行）</Text>
-        <TextInput
-          value={draft.text}
-          onChangeText={(t) => setDraft((d) => ({ ...d, text: t }))}
-          placeholder="例：OSTEP 1章を読んだ / AtCoder 1問解いた"
-          style={{
-            borderWidth: 1,
-            borderColor: "#ddd",
-            borderRadius: 14,
-            padding: 12,
-            fontSize: 16,
-          }}
-        />
-
-        <Text style={{ fontWeight: "700" }}>時間（分・任意）</Text>
-        <TextInput
-          value={draft.minutes}
-          onChangeText={(t) => setDraft((d) => ({ ...d, minutes: t }))}
-          placeholder="例：30"
-          keyboardType="number-pad"
-          style={{
-            borderWidth: 1,
-            borderColor: "#ddd",
-            borderRadius: 14,
-            padding: 12,
-            fontSize: 16,
-          }}
-        />
-
-        <Text style={{ fontWeight: "700" }}>証拠URL（任意）</Text>
-        <TextInput
-          value={draft.evidenceUrl}
-          onChangeText={(t) => setDraft((d) => ({ ...d, evidenceUrl: t }))}
-          placeholder="例：GitHubのコミットURL / ノートの写真URL"
-          autoCapitalize="none"
-          style={{
-            borderWidth: 1,
-            borderColor: "#ddd",
-            borderRadius: 14,
-            padding: 12,
-            fontSize: 16,
-          }}
-        />
-
-        <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
-          <Pressable
-            onPress={onClose}
-            style={{
-              flex: 1,
-              padding: 14,
-              borderRadius: 16,
-              borderWidth: 1,
-              borderColor: "#ddd",
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ fontWeight: "800" }}>キャンセル</Text>
-          </Pressable>
-
-          <Pressable
-            disabled={!canSubmit}
-            onPress={() => {
-              const minutesNum = Number(draft.minutes);
-              onSubmit({
-                categoryId: draft.categoryId,
-                text: draft.text.trim(),
-                minutes: Number.isFinite(minutesNum) && minutesNum > 0 ? minutesNum : undefined,
-                evidenceUrl: draft.evidenceUrl.trim() || undefined,
-              });
-              onClose();
-            }}
-            style={{
-              flex: 1,
-              padding: 14,
-              borderRadius: 16,
-              backgroundColor: canSubmit ? "#111" : "#999",
-              alignItems: "center",
-            }}
-          >
-            <Text style={{ fontWeight: "800", color: "#fff" }}>
-              {initial ? "保存" : "追加"}
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
+      </View>
     </Modal>
   );
 }

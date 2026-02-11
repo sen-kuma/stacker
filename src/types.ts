@@ -1,18 +1,28 @@
-export type CategoryId = "os" | "ml" | "math" | "english" | "dev" | "uni" | "health";
+export type Category = {
+  id: string;
+  name: string;
+  createdAt: number;
+};
 
 export type LogItem = {
   id: string;
-  categoryId: CategoryId;
+
+  // 変更：固定カテゴリではなく、ユーザー作成カテゴリのID（未設定も可）
+  categoryId?: string;
+
   text: string;
-  minutes?: number;      // 任意
-  evidenceUrl?: string;  // 任意（最初はURLのみ）
+  minutes?: number; // 任意
+  evidenceUrl?: string; // 任意
 };
 
 export type DailyLog = {
-  date: string;   // "YYYY-MM-DD"
-  score: number;  // 0-10
+  date: string; // "YYYY-MM-DD"
+
+  // 互換性のため number のまま保持（UIはS/A/B/C/Fで操作）
+  score: number; // 0-10
+
   items: LogItem[];
-  note?: string;  // 任意
+  note?: string; // 今日の一言
 };
 
 export type WeeklyReview = {
